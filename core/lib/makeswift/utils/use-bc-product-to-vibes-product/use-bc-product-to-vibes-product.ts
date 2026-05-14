@@ -27,7 +27,7 @@ export const BcProductSchema = z.object({
   defaultImage: z.object({ altText: z.string(), url: string() }).nullable(),
   brand: z.object({ name: z.string(), path: z.string() }).nullable(),
   path: z.string(),
-  prices: PricesSchema,
+  prices: PricesSchema.nullable(),
 });
 
 export type BcProductSchema = z.infer<typeof BcProductSchema>;

@@ -8,21 +8,24 @@ import { useProducts } from '../../utils/use-products';
 
 type MSProductsListProps = Omit<ComponentPropsWithoutRef<typeof ProductList>, 'products'> & {
   className: string;
-  collection: 'none' | 'best-selling' | 'newest' | 'featured';
-  limit: number;
-  additionalProducts: Array<{
+  collection?: 'none' | 'best-selling' | 'newest' | 'featured';
+  limit?: number;
+  additionalProducts?: Array<{
     entityId?: string;
   }>;
 };
 
 export function MSProductsList({
   className,
-  collection,
-  limit,
-  additionalProducts,
+  collection = 'best-selling',
+  limit = 12,
+  additionalProducts = [],
   ...props
 }: MSProductsListProps) {
-  const additionalProductIds = additionalProducts.map(({ entityId }) => entityId ?? '');
+  const additionalProductIds = additionalProducts
+    .map(({ entityId }) => entityId)
+    .filter((entityId): entityId is string => entityId != null && entityId !== '');
+
   const { products, isLoading } = useProducts({
     collection,
     collectionLimit: limit,

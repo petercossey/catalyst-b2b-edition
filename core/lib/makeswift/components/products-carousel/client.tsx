@@ -11,22 +11,25 @@ type MSProductsCarouselProps = Omit<
   'products'
 > & {
   className: string;
-  collection: 'none' | 'best-selling' | 'newest' | 'featured';
-  limit: number;
-  additionalProducts: Array<{
+  collection?: 'none' | 'best-selling' | 'newest' | 'featured';
+  limit?: number;
+  additionalProducts?: Array<{
     entityId?: string;
   }>;
 };
 
 export function MSProductsCarousel({
   className,
-  collection,
-  limit,
-  additionalProducts,
+  collection = 'best-selling',
+  limit = 12,
+  additionalProducts = [],
   hideOverflow,
   ...props
 }: MSProductsCarouselProps) {
-  const additionalProductIds = additionalProducts.map(({ entityId }) => entityId ?? '');
+  const additionalProductIds = additionalProducts
+    .map(({ entityId }) => entityId)
+    .filter((entityId): entityId is string => entityId != null && entityId !== '');
+
   const { products, isLoading } = useProducts({
     collection,
     collectionLimit: limit,
