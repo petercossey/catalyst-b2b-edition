@@ -11,7 +11,14 @@ import {
   useInputControl,
 } from '@conform-to/react';
 import { getZodConstraint, parseWithZod } from '@conform-to/zod';
-import { MouseEvent, ReactNode, startTransition, useActionState } from 'react';
+import {
+  FormEvent,
+  MouseEvent,
+  ReactNode,
+  startTransition,
+  useActionState,
+  useEffect,
+} from 'react';
 import { useFormStatus } from 'react-dom';
 import { z } from 'zod';
 
@@ -24,21 +31,31 @@ import { FormStatus } from '@/vibes/soul/form/form-status';
 import { Input } from '@/vibes/soul/form/input';
 import { NumberInput } from '@/vibes/soul/form/number-input';
 import { RadioGroup } from '@/vibes/soul/form/radio-group';
-import { SelectField } from '@/vibes/soul/form/select-field';
+import { Select } from '@/vibes/soul/form/select';
 import { SwatchRadioGroup } from '@/vibes/soul/form/swatch-radio-group';
 import { Textarea } from '@/vibes/soul/form/textarea';
 import { Button, ButtonProps } from '@/vibes/soul/primitives/button';
 
-import { Field, FieldGroup, schema } from './schema';
+import { Field, FieldGroup, PasswordComplexitySettings, schema } from './schema';
+import { removeOptionsFromFields } from './utils';
 
-type Action<S, P> = (state: Awaited<S>, payload: P) => S | Promise<S>;
-
-interface State<F extends Field> {
+export interface DynamicFormActionArgs<F extends Field> {
   fields: Array<F | FieldGroup<F>>;
-  lastResult: SubmissionResult | null;
+  passwordComplexity?: PasswordComplexitySettings | null;
 }
 
-export type DynamicFormAction<F extends Field> = Action<State<F>, FormData>;
+type Action<F extends Field, S, P> = (
+  args: DynamicFormActionArgs<F>,
+  state: Awaited<S>,
+  payload: P,
+) => S | Promise<S>;
+
+interface State {
+  lastResult: SubmissionResult | null;
+  successMessage?: ReactNode;
+}
+
+export type DynamicFormAction<F extends Field> = Action<F, State, FormData>;
 
 export interface DynamicFormProps<F extends Field> {
   fields: Array<F | FieldGroup<F>>;
@@ -49,23 +66,35 @@ export interface DynamicFormProps<F extends Field> {
   submitName?: string;
   submitValue?: string;
   onCancel?: (e: MouseEvent<HTMLButtonElement>) => void;
+  onChange?: (e: FormEvent<HTMLFormElement>) => void;
+  onSuccess?: (lastResult: SubmissionResult, successMessage: ReactNode) => void;
+  passwordComplexity?: PasswordComplexitySettings | null;
 }
 
 export function DynamicForm<F extends Field>({
   action,
-  fields: defaultFields,
+  fields,
   buttonSize = 'medium',
   cancelLabel = 'Cancel',
   submitLabel = 'Submit',
   submitName,
   submitValue,
   onCancel,
+  onChange,
+  onSuccess,
+  passwordComplexity,
 }: DynamicFormProps<F>) {
-  const [{ lastResult, fields }, formAction] = useActionState(action, {
-    fields: defaultFields,
+  // Remove options from fields before passing to action to reduce payload size
+  // Options are only needed for rendering, not for processing form submissions
+  // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
+  const fieldsWithoutOptions = removeOptionsFromFields(fields) as Array<F | FieldGroup<F>>;
+  const actionWithFields = action.bind(null, { fields: fieldsWithoutOptions, passwordComplexity });
+
+  const [{ lastResult, successMessage }, formAction] = useActionState(actionWithFields, {
     lastResult: null,
   });
-  const dynamicSchema = schema(fields);
+
+  const dynamicSchema = schema(fields, passwordComplexity);
   const defaultValue = fields
     .flatMap((f) => (Array.isArray(f) ? f : [f]))
     .reduce<z.infer<typeof dynamicSchema>>(
@@ -93,14 +122,20 @@ export function DynamicForm<F extends Field>({
     },
   });
 
+  useEffect(() => {
+    if (lastResult && lastResult.status === 'success' && successMessage) {
+      onSuccess?.(lastResult, successMessage);
+    }
+  }, [lastResult, successMessage, onSuccess]);
+
   return (
     <FormProvider context={form.context}>
-      <form {...getFormProps(form)} action={formAction}>
+      <form {...getFormProps(form)} action={formAction} onChange={onChange}>
         <div className="space-y-6">
           {fields.map((field, index) => {
             if (Array.isArray(field)) {
               return (
-                <div className="flex gap-4" key={index}>
+                <div className="flex flex-col gap-4 @sm:flex-row" key={index}>
                   {field.map((f) => {
                     const groupFormField = formFields[f.name];
 
@@ -185,20 +220,23 @@ function DynamicFormField({
         <NumberInput
           {...getInputProps(formField, { type: 'number' })}
           decrementLabel={field.decrementLabel}
+          defaultValue={field.defaultValue}
           errors={formField.errors}
           incrementLabel={field.incrementLabel}
           key={field.name}
           label={field.label}
+          placeholder={field.placeholder}
         />
       );
 
     case 'text':
       return (
         <Input
-          {...getInputProps(formField, { type: 'text' })}
+          {...getInputProps(formField, { type: 'text', pattern: field.pattern })}
           errors={formField.errors}
           key={field.name}
           label={field.label}
+          placeholder={field.placeholder}
         />
       );
 
@@ -209,6 +247,7 @@ function DynamicFormField({
           errors={formField.errors}
           key={field.name}
           label={field.label}
+          placeholder={field.placeholder}
         />
       );
 
@@ -220,6 +259,7 @@ function DynamicFormField({
           errors={formField.errors}
           key={field.name}
           label={field.label}
+          placeholder={field.placeholder}
         />
       );
 
@@ -230,12 +270,14 @@ function DynamicFormField({
           errors={formField.errors}
           key={field.name}
           label={field.label}
+          placeholder={field.placeholder}
         />
       );
 
     case 'checkbox':
       return (
         <Checkbox
+          defaultValue={field.defaultValue}
           errors={formField.errors}
           key={field.name}
           label={field.label}
@@ -243,7 +285,7 @@ function DynamicFormField({
           onBlur={controls.blur}
           onCheckedChange={(value) => controls.change(String(value))}
           onFocus={controls.focus}
-          required={formField.required}
+          required={field.required}
           value={controls.value}
         />
       );
@@ -257,13 +299,14 @@ function DynamicFormField({
           name={formField.name}
           onValueChange={controls.change}
           options={field.options}
+          required={field.required}
           value={Array.isArray(controls.value) ? controls.value : []}
         />
       );
 
     case 'select':
       return (
-        <SelectField
+        <Select
           errors={formField.errors}
           key={field.name}
           label={field.label}
@@ -272,6 +315,7 @@ function DynamicFormField({
           onFocus={controls.focus}
           onValueChange={controls.change}
           options={field.options}
+          placeholder={field.placeholder}
           required={formField.required}
           value={typeof controls.value === 'string' ? controls.value : ''}
         />
@@ -347,6 +391,7 @@ function DynamicFormField({
     case 'date':
       return (
         <DatePicker
+          defaultValue={field.defaultValue}
           disabledDays={
             field.minDate != null && field.maxDate != null
               ? {
