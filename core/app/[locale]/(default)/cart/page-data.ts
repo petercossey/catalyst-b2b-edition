@@ -8,6 +8,7 @@ import { TAGS } from '~/client/tags';
 
 export const PhysicalItemFragment = graphql(`
   fragment PhysicalItemFragment on CartPhysicalItem {
+    __typename
     name
     brand
     sku
@@ -18,19 +19,12 @@ export const PhysicalItemFragment = graphql(`
     quantity
     productEntityId
     variantEntityId
-    extendedListPrice {
-      currencyCode
-      value
-    }
-    extendedSalePrice {
-      currencyCode
-      value
-    }
-    originalPrice {
-      currencyCode
-      value
-    }
+    parentEntityId
     listPrice {
+      currencyCode
+      value
+    }
+    salePrice {
       currencyCode
       value
     }
@@ -67,6 +61,7 @@ export const PhysicalItemFragment = graphql(`
 
 export const DigitalItemFragment = graphql(`
   fragment DigitalItemFragment on CartDigitalItem {
+    __typename
     name
     brand
     sku
@@ -77,19 +72,12 @@ export const DigitalItemFragment = graphql(`
     quantity
     productEntityId
     variantEntityId
-    extendedListPrice {
-      currencyCode
-      value
-    }
-    extendedSalePrice {
-      currencyCode
-      value
-    }
-    originalPrice {
-      currencyCode
-      value
-    }
+    parentEntityId
     listPrice {
+      currencyCode
+      value
+    }
+    salePrice {
       currencyCode
       value
     }
@@ -121,6 +109,33 @@ export const DigitalItemFragment = graphql(`
       }
     }
     url
+  }
+`);
+
+export const CartGiftCertificateFragment = graphql(`
+  fragment CartGiftCertificateFragment on CartGiftCertificate {
+    __typename
+    entityId
+    name
+    message
+    isTaxable
+    sender {
+      name
+      email
+    }
+    recipient {
+      name
+      email
+    }
+    amount {
+      currencyCode
+      value
+    }
+    amountInDisplayCurrency {
+      currencyCode
+      value
+    }
+    theme
   }
 `);
 
@@ -188,8 +203,16 @@ const GeographyFragment = graphql(
 
 const CartPageQuery = graphql(
   `
-    query CartPageQuery($cartId: String) {
+    query CartPageQuery($cartId: String, $currencyCode: currencyCode) {
       site {
+        settings {
+          url {
+            checkoutUrl
+          }
+          giftCertificates(currencyCode: $currencyCode) {
+            isEnabled
+          }
+        }
         cart(entityId: $cartId) {
           entityId
           version
@@ -203,6 +226,9 @@ const CartPageQuery = graphql(
             }
             digitalItems {
               ...DigitalItemFragment
+            }
+            giftCertificates {
+              ...CartGiftCertificateFragment
             }
             totalQuantity
           }
@@ -227,6 +253,15 @@ const CartPageQuery = graphql(
               ...MoneyFieldsFragment
             }
           }
+          giftCertificates {
+            code
+            balance {
+              ...MoneyFieldsFragment
+            }
+            used {
+              ...MoneyFieldsFragment
+            }
+          }
           ...ShippingInfoFragment
         }
       }
@@ -241,6 +276,7 @@ const CartPageQuery = graphql(
     MoneyFieldsFragment,
     ShippingInfoFragment,
     GeographyFragment,
+    CartGiftCertificateFragment,
   ],
 );
 

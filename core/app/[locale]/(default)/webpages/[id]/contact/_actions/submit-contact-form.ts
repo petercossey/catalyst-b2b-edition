@@ -6,7 +6,8 @@ import { parseWithZod } from '@conform-to/zod';
 import { getLocale, getTranslations } from 'next-intl/server';
 import { z } from 'zod';
 
-import { Field, FieldGroup, schema } from '@/vibes/soul/form/dynamic-form/schema';
+import { DynamicFormActionArgs } from '@/vibes/soul/form/dynamic-form';
+import { Field, schema } from '@/vibes/soul/form/dynamic-form/schema';
 import { client } from '~/client';
 import { graphql, VariablesOf } from '~/client/graphql';
 import { redirect } from '~/i18n/routing';
@@ -25,8 +26,8 @@ const inputSchema = z.object({
 });
 
 const SubmitContactUsMutation = graphql(`
-  mutation SubmitContactUsMutation($input: SubmitContactUsInput!, $reCaptchaV2: ReCaptchaV2Input) {
-    submitContactUs(input: $input, reCaptchaV2: $reCaptchaV2) {
+  mutation SubmitContactUsMutation($input: SubmitContactUsInput!) {
+    submitContactUs(input: $input) {
       __typename
       errors {
         __typename
@@ -58,18 +59,18 @@ function parseContactFormInput(
 }
 
 export async function submitContactForm<F extends Field>(
-  prevState: { lastResult: SubmissionResult | null; fields: Array<F | FieldGroup<F>> },
+  { fields }: DynamicFormActionArgs<F>,
+  _prevState: { lastResult: SubmissionResult | null },
   formData: FormData,
 ) {
   const t = await getTranslations('WebPages.ContactUs.Form');
   const locale = await getLocale();
 
-  const submission = parseWithZod(formData, { schema: schema(prevState.fields) });
+  const submission = parseWithZod(formData, { schema: schema(fields) });
 
   if (submission.status !== 'success') {
     return {
       lastResult: submission.reply(),
-      fields: prevState.fields,
     };
   }
 
@@ -79,7 +80,6 @@ export async function submitContactForm<F extends Field>(
       document: SubmitContactUsMutation,
       variables: {
         input,
-        // ...(recaptchaToken && { reCaptchaV2: { token: recaptchaToken } }),
       },
       fetchOptions: { cache: 'no-store' },
     });
@@ -89,7 +89,6 @@ export async function submitContactForm<F extends Field>(
     if (result.errors.length > 0) {
       return {
         lastResult: submission.reply({ formErrors: result.errors.map((error) => error.message) }),
-        fields: prevState.fields,
       };
     }
   } catch (error) {
@@ -101,20 +100,17 @@ export async function submitContactForm<F extends Field>(
         lastResult: submission.reply({
           formErrors: error.errors.map(({ message }) => message),
         }),
-        fields: prevState.fields,
       };
     }
 
     if (error instanceof Error) {
       return {
         lastResult: submission.reply({ formErrors: [error.message] }),
-        fields: prevState.fields,
       };
     }
 
     return {
       lastResult: submission.reply({ formErrors: [t('somethingWentWrong')] }),
-      fields: prevState.fields,
     };
   }
 

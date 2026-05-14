@@ -34,6 +34,7 @@ test('Displays a simple product and can add it to the cart', async ({
 
 test('Displays out of stock product correctly', async ({ page, catalog }) => {
   const t = await getTranslations('Product.ProductDetails');
+
   const product = await catalog.createSimpleProduct({
     inventoryTracking: 'product',
     inventoryLevel: 0,
@@ -44,6 +45,78 @@ test('Displays out of stock product correctly', async ({ page, catalog }) => {
 
   await expect(page.getByRole('heading', { name: product.name })).toBeVisible();
   await expect(page.getByRole('button', { name: t('Submit.outOfStock') })).toBeVisible();
+});
+
+test('Displays out of stock product correctly when out of stock message is enabled', async ({
+  page,
+  catalog,
+  settings,
+}) => {
+  // Test is flaky due to cache. Set an increased timeout for the entire test.
+  test.setTimeout(90000);
+
+  const t = await getTranslations('Product.ProductDetails');
+
+  await settings.setInventorySettings({
+    showOutOfStockMessage: true,
+    defaultOutOfStockMessage: 'Currently out of stock',
+  });
+
+  const product = await catalog.createSimpleProduct({
+    inventoryTracking: 'product',
+    inventoryLevel: 0,
+  });
+
+  await page.goto(product.path);
+  await page.waitForLoadState('networkidle');
+
+  await expect(page.getByRole('heading', { name: product.name })).toBeVisible();
+  await expect(page.getByRole('button', { name: t('Submit.outOfStock') })).toBeVisible();
+
+  // Test is flakey due to settings cache. Retry assertions several times until it passes.
+  await expect(async () => {
+    try {
+      await expect(page.getByText('Currently out of stock')).toBeVisible();
+    } catch {
+      await page.reload();
+      await expect(page.getByText('Currently out of stock')).toBeVisible();
+    }
+  }).toPass({ timeout: 90000, intervals: [2000] });
+});
+
+test('Displays current stock message when stock level message is enabled', async ({
+  page,
+  catalog,
+  settings,
+}) => {
+  // Test is flaky due to cache. Set an increased timeout for the entire test.
+  test.setTimeout(90000);
+
+  const t = await getTranslations('Product.ProductDetails');
+
+  await settings.setInventorySettings({
+    stockLevelDisplay: 'show',
+  });
+
+  const product = await catalog.createSimpleProduct({
+    inventoryTracking: 'product',
+    inventoryLevel: 10,
+  });
+
+  await page.goto(product.path);
+  await page.waitForLoadState('networkidle');
+
+  await expect(page.getByRole('heading', { name: product.name })).toBeVisible();
+
+  // Test is flakey due to settings cache. Retry assertions several times until it passes.
+  await expect(async () => {
+    try {
+      await expect(page.getByText(t('currentStock', { quantity: 10 }))).toBeVisible();
+    } catch {
+      await page.reload();
+      await expect(page.getByText(t('currentStock', { quantity: 10 }))).toBeVisible();
+    }
+  }).toPass({ timeout: 90000, intervals: [2000] });
 });
 
 test('Displays product price correctly for an alternate currency', async ({
